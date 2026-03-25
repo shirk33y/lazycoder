@@ -1,5 +1,6 @@
 config.yaml
 spent_today.json
+run_counts.json
 run_log.json
 *.json
 __pycache__/
