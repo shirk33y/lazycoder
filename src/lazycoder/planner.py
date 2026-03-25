@@ -58,7 +58,11 @@ def _llm(model: str, prompt: str) -> str:
     resp = litellm.completion(model=model, messages=messages, max_tokens=4096)
     u = getattr(resp, "usage", None)
     actual = u.prompt_tokens + u.completion_tokens if u else est_in
-    get_limiter(model).record(actual)
+    limiter = get_limiter(model)
+    limiter.record(actual)
+    # Sync from server headers so executor has accurate remaining capacity
+    headers = getattr(resp, "_hidden_params", {}).get("additional_headers") or {}
+    limiter.sync_from_headers(headers)
     if u:
         cost = litellm.completion_cost(completion_response=resp)
         print(f"  done     in={u.prompt_tokens}  out={u.completion_tokens}  cost=${cost:.4f}")

@@ -99,10 +99,8 @@ def run(config_path: str, dry_run: bool) -> None:
         print("\ndry run — stopping before execution.")
         return
 
-    # 3. Executor — wait for rate-limit window to clear after planner calls
-    import time as _time
-    print("\nwaiting 90s for rate-limit window to clear …")
-    _time.sleep(90)
+    # 3. Executor — rate limiter is synced from planner response headers;
+    #    acquire() will sleep exactly as long as the server says we need to wait
     print()
     results = run_all(tasks, budget, cfg)
 
