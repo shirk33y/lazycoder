@@ -31,6 +31,9 @@ from .run_tracker import record_result
 
 class _RateLimitHalt(Exception):
     """Raised to immediately stop the entire run when rate-limited."""
+    def __init__(self, msg: str, retry_after: float = 60.0):
+        super().__init__(msg)
+        self.retry_after = retry_after
 
 
 def _build_prompt(issue_title: str, issue_body: str, task_text: str, prior_status: str | None) -> str:
@@ -83,6 +86,15 @@ You can execute bash commands and edit files to implement the necessary changes.
 """
 
 
+def _rpm_throttle_callback(kwargs, completion_response, start_time, end_time) -> None:
+    """litellm success callback: enforce minimum gap between requests (Tier 1 = 50 RPM = 1.2s/req)."""
+    elapsed = (end_time - start_time).total_seconds()
+    min_gap = float(os.environ.get("LAZYCODER_MIN_REQUEST_GAP", "1.2"))
+    remaining = min_gap - elapsed
+    if remaining > 0:
+        time.sleep(remaining)
+
+
 def _run_agent(prompt: str, repo_dir: Path, model: str) -> tuple[str, float]:
     from minisweagent.agents.default import DefaultAgent
     from minisweagent.environments.local import LocalEnvironment
@@ -91,6 +103,9 @@ def _run_agent(prompt: str, repo_dir: Path, model: str) -> tuple[str, float]:
     logging.getLogger("LiteLLM").setLevel(logging.ERROR)
     logging.getLogger("litellm").setLevel(logging.ERROR)
     os.environ["MSWEA_MODEL_RETRY_STOP_AFTER_ATTEMPT"] = "1"  # no retries — halt on rate limit
+
+    # Enforce RPM limit: Tier 1 = 50 RPM → 1 req per 1.2s minimum
+    litellm.success_callback = [_rpm_throttle_callback]
 
     first_messages = [
         {"role": "system", "content": _DEFAULT_SYSTEM},
@@ -250,7 +265,22 @@ def run_task(task: Task, budget: DailyBudget, cfg: Config) -> RunResult:
         record_result(task.repo, task.issue_number, success=False, transient=is_transient)
         result = RunResult(task=task, success=False, actual_cost=0.0, branch=branch, notes=err)
         if is_rate_limit:
-            raise _RateLimitHalt(err) from exc
+            # Parse retry-after from error or exception headers
+            retry_after = 60.0
+            try:
+                import re as _re
+                m = _re.search(r'"retry[-_]after":\s*"?([0-9.]+)"?', err, _re.IGNORECASE)
+                if not m:
+                    m = _re.search(r'retry.after[=: ]+([0-9.]+)', err, _re.IGNORECASE)
+                if m:
+                    retry_after = float(m.group(1))
+                elif hasattr(exc, "response") and exc.response is not None:
+                    ra = exc.response.headers.get("retry-after")
+                    if ra:
+                        retry_after = float(ra)
+            except Exception:
+                pass
+            raise _RateLimitHalt(err, retry_after=retry_after) from exc
         return result
     finally:
         if repo_dir and repo_dir.exists():
@@ -266,8 +296,8 @@ def run_all(tasks: list[Task], budget: DailyBudget, cfg: Config) -> list[RunResu
         print(f"  [{i}/{len(tasks)}] #{task.issue_number}  {task.task_text[:70]}")
         try:
             result = run_task(task, budget, cfg)
-        except _RateLimitHalt:
-            print(f"  ⚠ rate limit — halting run")
+        except _RateLimitHalt as e:
+            print(f"  ⚠ rate limit — retry-after {e.retry_after:.0f}s — halting run")
             return results
         results.append(result)
         mark = "✓" if result.success else "✗"
