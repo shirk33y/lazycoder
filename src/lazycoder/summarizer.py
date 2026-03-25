@@ -29,10 +29,14 @@ def _llm(model: str, user: str, *, repo: str, issue: int) -> str:
         {"role": "system", "content": _SUMMARY_SYSTEM},
         {"role": "user", "content": user},
     ]
+    from .rate_limiter import get_limiter
     est_in = litellm.token_counter(model=model, messages=messages)
+    get_limiter(model).acquire(est_in, label="summarizer")
     print(f"  sending  in~{est_in} tokens …")
     resp = litellm.completion(model=model, messages=messages, max_tokens=512)
     u = getattr(resp, "usage", None)
+    actual = u.prompt_tokens + u.completion_tokens if u else est_in
+    get_limiter(model).record(actual)
     if u:
         cost = litellm.completion_cost(completion_response=resp)
         print(f"  done     in={u.prompt_tokens}  out={u.completion_tokens}  cost=${cost:.4f}")

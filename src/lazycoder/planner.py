@@ -47,14 +47,18 @@ have a complete, up-to-date plan with no new status info.
 
 
 def _llm(model: str, prompt: str) -> str:
+    from .rate_limiter import get_limiter
     messages = [
         {"role": "system", "content": _PLAN_SYSTEM},
         {"role": "user", "content": prompt},
     ]
     est_in = litellm.token_counter(model=model, messages=messages)
+    get_limiter(model).acquire(est_in, label="planner")
     print(f"  sending  in~{est_in} tokens …")
     resp = litellm.completion(model=model, messages=messages, max_tokens=4096)
     u = getattr(resp, "usage", None)
+    actual = u.prompt_tokens + u.completion_tokens if u else est_in
+    get_limiter(model).record(actual)
     if u:
         cost = litellm.completion_cost(completion_response=resp)
         print(f"  done     in={u.prompt_tokens}  out={u.completion_tokens}  cost=${cost:.4f}")
