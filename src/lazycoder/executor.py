@@ -16,10 +16,16 @@ from pathlib import Path
 
 from github import Github
 
+import logging
+
 from .budget import DailyBudget, add_entry, over_hard_limit
 from .config import Config
 from .models import RunResult, Task
 from .run_tracker import record_result
+
+
+class _RateLimitHalt(Exception):
+    """Raised to immediately stop the entire run when rate-limited."""
 
 
 def _build_prompt(issue_title: str, issue_body: str, task_text: str, prior_status: str | None) -> str:
@@ -77,7 +83,6 @@ def _run_agent(prompt: str, repo_dir: Path, model: str) -> tuple[str, float]:
     from minisweagent.environments.local import LocalEnvironment
     from minisweagent.models.litellm_model import LitellmModel
 
-    import logging
     logging.getLogger("LiteLLM").setLevel(logging.ERROR)
     logging.getLogger("litellm").setLevel(logging.ERROR)
 
@@ -207,15 +212,19 @@ def run_task(task: Task, budget: DailyBudget, cfg: Config) -> RunResult:
 
     except Exception as exc:
         err = str(exc)
+        is_rate_limit = "rate_limit" in err.lower() or "RateLimitError" in type(exc).__name__
         try:
             issue.create_comment(
                 f"## Status\nTask: `{task.task_text}`\nBranch: `{branch}`\n\n"
-                f"```\nERROR: {err}\n```\n\nCost: $0.000"
+                f"```\nERROR: {err[:400]}\n```\n\nCost: $0.000"
             )
         except Exception:
             pass
         record_result(task.repo, task.issue_number, success=False)
-        return RunResult(task=task, success=False, actual_cost=0.0, branch=branch, notes=err)
+        result = RunResult(task=task, success=False, actual_cost=0.0, branch=branch, notes=err)
+        if is_rate_limit:
+            raise _RateLimitHalt(err) from exc
+        return result
     finally:
         if repo_dir and repo_dir.exists():
             shutil.rmtree(repo_dir, ignore_errors=True)
@@ -228,14 +237,17 @@ def run_all(tasks: list[Task], budget: DailyBudget, cfg: Config) -> list[RunResu
             print(f"  ⚠ hard limit ${cfg.budget.hard_limit_daily} reached — stopping")
             break
         print(f"  [{i}/{len(tasks)}] #{task.issue_number}  {task.task_text[:70]}")
-        result = run_task(task, budget, cfg)
+        try:
+            result = run_task(task, budget, cfg)
+        except _RateLimitHalt as e:
+            print(f"  ⚠ rate limit hit — halting run")
+            print(f"    {str(e)[:200]}")
+            break
         results.append(result)
         mark = "✓" if result.success else "✗"
         cost_str = f"${result.actual_cost:.3f}"
-        if result.success:
-            print(f"        {mark}  {cost_str}")
-        else:
+        print(f"        {mark}  {cost_str}")
+        if not result.success:
             short_err = (result.notes or "unknown error")[:120]
-            print(f"        {mark}  {cost_str}")
             print(f"        ERROR: {short_err}")
     return results
