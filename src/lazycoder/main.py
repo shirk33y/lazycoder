@@ -98,8 +98,8 @@ def run(config_path: str, dry_run: bool) -> None:
 
     # 3. Executor — wait for rate-limit window to clear after planner calls
     import time as _time
-    print("\nwaiting 65s for rate-limit window to clear …")
-    _time.sleep(65)
+    print("\nwaiting 90s for rate-limit window to clear …")
+    _time.sleep(90)
     print()
     results = run_all(tasks, budget, cfg)
 
