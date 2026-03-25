@@ -77,6 +77,10 @@ def _run_agent(prompt: str, repo_dir: Path, model: str) -> tuple[str, float]:
     from minisweagent.environments.local import LocalEnvironment
     from minisweagent.models.litellm_model import LitellmModel
 
+    import logging
+    logging.getLogger("LiteLLM").setLevel(logging.ERROR)
+    logging.getLogger("litellm").setLevel(logging.ERROR)
+
     env = LocalEnvironment(cwd=str(repo_dir))
     mdl = LitellmModel(model_name=model, cost_tracking="ignore_errors")
     agent = DefaultAgent(mdl, env, system_template=_DEFAULT_SYSTEM, instance_template=_DEFAULT_INSTANCE)
@@ -202,15 +206,16 @@ def run_task(task: Task, budget: DailyBudget, cfg: Config) -> RunResult:
                          branch=branch, notes=summary, status_comment_id=comment_id)
 
     except Exception as exc:
+        err = str(exc)
         try:
             issue.create_comment(
-                f"## Status\nTask: {task.task_text}\nBranch: {branch}\n"
-                f"Result: ERROR: {exc}\nCost: $0.000\n"
+                f"## Status\nTask: `{task.task_text}`\nBranch: `{branch}`\n\n"
+                f"```\nERROR: {err}\n```\n\nCost: $0.000"
             )
         except Exception:
             pass
         record_result(task.repo, task.issue_number, success=False)
-        return RunResult(task=task, success=False, actual_cost=0.0, branch=branch, notes=str(exc))
+        return RunResult(task=task, success=False, actual_cost=0.0, branch=branch, notes=err)
     finally:
         if repo_dir and repo_dir.exists():
             shutil.rmtree(repo_dir, ignore_errors=True)
@@ -218,12 +223,19 @@ def run_task(task: Task, budget: DailyBudget, cfg: Config) -> RunResult:
 
 def run_all(tasks: list[Task], budget: DailyBudget, cfg: Config) -> list[RunResult]:
     results: list[RunResult] = []
-    for task in tasks:
+    for i, task in enumerate(tasks, 1):
         if over_hard_limit(budget, cfg.budget.hard_limit_daily):
-            print(f"[executor] Hard limit ${cfg.budget.hard_limit_daily} reached — stopping")
+            print(f"  ⚠ hard limit ${cfg.budget.hard_limit_daily} reached — stopping")
             break
-        print(f"[executor] {task.repo}#{task.issue_number} — {task.task_text[:60]}")
+        print(f"  [{i}/{len(tasks)}] #{task.issue_number}  {task.task_text[:70]}")
         result = run_task(task, budget, cfg)
         results.append(result)
-        print(f"[executor] {'OK' if result.success else 'FAIL'} cost=${result.actual_cost:.3f}")
+        mark = "✓" if result.success else "✗"
+        cost_str = f"${result.actual_cost:.3f}"
+        if result.success:
+            print(f"        {mark}  {cost_str}")
+        else:
+            short_err = (result.notes or "unknown error")[:120]
+            print(f"        {mark}  {cost_str}")
+            print(f"        ERROR: {short_err}")
     return results

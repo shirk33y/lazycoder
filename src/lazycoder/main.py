@@ -57,9 +57,12 @@ def run(config_path: str, dry_run: bool) -> None:
     cfg = load_config(config_path)
     budget = load_budget()
 
-    print(f"[lazycoder] Budget: ${budget.total:.3f} spent / ${cfg.budget.soft_limit_daily:.2f} soft limit")
+    spent = budget.total
+    soft = cfg.budget.soft_limit_daily
+    print(f"budget  ${spent:.3f} / ${soft:.2f}  ({spent/soft*100:.0f}% of soft limit)")
 
-    # 1. Planner — one LLM call
+    # 1. Planner
+    print("\nplanning …")
     plans = run_planner(
         repos=cfg.repos,
         model=cfg.models.planner,
@@ -67,8 +70,9 @@ def run(config_path: str, dry_run: bool) -> None:
         bot_username=cfg.github.bot_username,
         blocked_labels=cfg.blocked_labels,
     )
+    print(f"  {len(plans)} issue(s) planned")
 
-    # 2. Scheduler — pure Python
+    # 2. Scheduler
     tasks = schedule(
         plans=plans,
         budget=budget,
@@ -78,27 +82,30 @@ def run(config_path: str, dry_run: bool) -> None:
     )
 
     if not tasks:
-        print("[lazycoder] Nothing scheduled.")
+        print("\nnothing to schedule — done.")
         return
 
-    print(f"\n[scheduler] Selected tasks:")
+    print(f"\nscheduled {len(tasks)} task(s):")
     for t in tasks:
-        print(f"  {t.repo}#{t.issue_number} [{t.priority.value or 'no-priority'}]"
-              f"  ~${t.estimate_usd:.2f}  {t.task_text[:60]}")
+        pri = t.priority.value or "—"
+        print(f"  #{t.issue_number:<4} ~${t.estimate_usd:.2f}  [{pri}]  {t.task_text[:70]}")
 
     if dry_run:
-        print("\n[lazycoder] Dry run — stopping before execution.")
+        print("\ndry run — stopping before execution.")
         return
 
-    # 3. Executor — mini-swe-agent × N
+    # 3. Executor
+    print()
     results = run_all(tasks, budget, cfg)
 
-    # 4. Summarizer — one LLM call
+    # 4. Summarizer
     post_summary(results, cfg.models.summarizer, cfg.github.token,
                  cfg.github.bot_username, cfg.repos)
 
     save_budget(budget)
-    print(f"\n[lazycoder] Done. Total cost today: ${budget.total:.3f}")
+    ok = sum(1 for r in results if r.success)
+    fail = len(results) - ok
+    print(f"\n✓ done  {ok} ok  {fail} failed  total ${budget.total:.3f}")
 
 
 @cli.command()

@@ -10,6 +10,7 @@ from datetime import date
 
 import litellm
 
+from .conversation_store import ConversationStore
 from .models import RunResult
 
 
@@ -20,20 +21,37 @@ Be factual. List each repo+issue, its outcome, and cost.
 Keep it under 20 lines.
 """
 
+_store = ConversationStore()
 
-def _llm(model: str, user: str) -> str:
+
+def _llm(model: str, user: str, *, repo: str, issue: int) -> str:
+    messages = [
+        {"role": "system", "content": _SUMMARY_SYSTEM},
+        {"role": "user", "content": user},
+    ]
     resp = litellm.completion(
         model=model,
-        messages=[
-            {"role": "system", "content": _SUMMARY_SYSTEM},
-            {"role": "user", "content": user},
-        ],
+        messages=messages,
         max_tokens=512,
     )
+    # Persist conversation (best-effort — never crash the main flow)
+    try:
+        path = _store.save_conversation(
+            role="summarizer",
+            repo=repo,
+            issue=issue,
+            messages=messages,
+            response=resp,
+        )
+        print(f"  conversation saved → {path}")
+    except Exception as exc:  # pragma: no cover
+        print(f"  ⚠ could not save conversation: {exc}")
+
     return resp.choices[0].message.content.strip()
 
 
-def write_summary(results: list[RunResult], model: str, token: str, bot_username: str) -> str:
+def write_summary(results: list[RunResult], model: str, token: str, bot_username: str,
+                  *, repo: str = "", issue: int = 0) -> str:
     """Generate and return summary text. Caller decides where to post it."""
     if not results:
         return f"## Summary\nRun {date.today().isoformat()}: no tasks executed."
@@ -47,7 +65,16 @@ def write_summary(results: list[RunResult], model: str, token: str, bot_username
             lines.append(f"  note: {r.notes[:100]}")
 
     user_prompt = "\n".join(lines)
-    return _llm(model, user_prompt)
+    summary_text = _llm(model, user_prompt, repo=repo or (results[0].task.repo if results else ""), issue=issue)
+
+    # Persist the human-readable markdown summary
+    try:
+        md_path = _store.save_summary(f"## Summary\n{summary_text}")
+        print(f"  summary saved → {md_path}")
+    except Exception as exc:  # pragma: no cover
+        print(f"  ⚠ could not save summary: {exc}")
+
+    return summary_text
 
 
 def post_summary(results: list[RunResult], model: str, token: str, bot_username: str, repos: list[str]) -> None:
@@ -65,12 +92,15 @@ def post_summary(results: list[RunResult], model: str, token: str, bot_username:
         if not repo_results:
             continue
 
-        summary_text = write_summary(repo_results, model, token, bot_username)
+        issue_number = get_or_create_log_issue(repo_name, token)
+        summary_text = write_summary(
+            repo_results, model, token, bot_username,
+            repo=repo_name, issue=issue_number,
+        )
         body = f"## Summary\n{summary_text}"
 
-        issue_number = get_or_create_log_issue(repo_name, token)
         repo = gh.get_repo(repo_name)
         issue = repo.get_issue(issue_number)
 
         issue.create_comment(body)
-        print(f"[summarizer] Posted summary on {repo_name}#{issue_number}")
+        print(f"  ✓ summary posted → {repo_name}#{issue_number}")

@@ -49,7 +49,7 @@ def select_within_budget(
     accumulated = 0.0
     for _, est, task in candidates:
         if accumulated + est > remaining:
-            print(f"[scheduler] Budget cap reached at ${accumulated:.3f} — stopping selection")
+            print(f"  budget cap ${accumulated:.3f} — stopping selection")
             break
         selected.append(task)
         accumulated += est
@@ -66,7 +66,7 @@ def schedule(
     """Return ordered tasks that fit within the remaining soft budget."""
     remaining = remaining_soft(budget, soft_limit)
     if remaining <= 0:
-        print(f"[scheduler] Soft budget exhausted (${budget.total:.3f} / ${soft_limit:.2f})")
+        print(f"  soft budget exhausted (${budget.total:.3f} / ${soft_limit:.2f})")
         return []
 
     gh = Github(token)
@@ -77,18 +77,18 @@ def schedule(
             repo = gh.get_repo(plan.repo)
             issue = repo.get_issue(plan.issue_number)
         except Exception as e:
-            print(f"[scheduler] Could not fetch {plan.repo}#{plan.issue_number}: {e}")
+            print(f"  ✗ could not fetch #{plan.issue_number}: {e}")
             continue
 
         label_names = {lbl.name for lbl in issue.labels}
 
         if label_names & set(blocked_labels):
-            print(f"[scheduler] #{plan.issue_number} skipped (blocked label)")
+            print(f"  — #{plan.issue_number} skipped (blocked label)")
             continue
 
         # Data-based stuck detection — no LLM needed
         if is_stuck(plan.repo, plan.issue_number):
-            print(f"[scheduler] #{plan.issue_number} stuck ({3}+ failed runs) → adding needs-human")
+            print(f"  ⚠ #{plan.issue_number} stuck (3+ failures) → needs-human")
             try:
                 issue.add_to_labels("needs-human")
             except Exception:
@@ -114,5 +114,5 @@ def schedule(
 
     selected = select_within_budget(candidates, remaining)
     total = sum(t.estimate_usd for t in selected)
-    print(f"[scheduler] {len(selected)} tasks selected, estimated ${total:.3f} / ${remaining:.3f} remaining")
+    print(f"  {len(selected)} task(s) selected  ~${total:.3f} / ${remaining:.3f} remaining")
     return selected

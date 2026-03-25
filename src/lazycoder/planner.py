@@ -145,7 +145,7 @@ def run_planner(
         return []
 
     # Single LLM call for all issues
-    print(f"[planner] {len(issues_data)} issues → 1 LLM call")
+    print(f"  {len(issues_data)} issue(s) → planning …")
     raw = _llm(model, _build_prompt(issues_data))
     updates = _parse_response(raw)
 
@@ -188,5 +188,5 @@ def run_planner(
             items = _parse_existing_plan(pc.body)
             plans.append(Plan(issue_number=key[1], repo=key[0], items=items, comment_id=pc.id))
 
-    print(f"[planner] {len(plans)} plans ready")
+    print(f"  {len(plans)} plan(s) ready")
     return plans
