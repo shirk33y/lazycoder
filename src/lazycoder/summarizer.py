@@ -51,8 +51,9 @@ def write_summary(results: list[RunResult], model: str, token: str, bot_username
 
 
 def post_summary(results: list[RunResult], model: str, token: str, bot_username: str, repos: list[str]) -> None:
-    """Post ## Summary as a comment on the first open issue of each repo."""
+    """Post ## Summary as a comment on the dedicated run log issue for each repo."""
     from github import Github
+    from .run_log import get_or_create_log_issue
     gh = Github(token)
 
     by_repo: dict[str, list[RunResult]] = {}
@@ -67,18 +68,9 @@ def post_summary(results: list[RunResult], model: str, token: str, bot_username:
         summary_text = write_summary(repo_results, model, token, bot_username)
         body = f"## Summary\n{summary_text}"
 
+        issue_number = get_or_create_log_issue(repo_name, token)
         repo = gh.get_repo(repo_name)
-        issues = list(repo.get_issues(state="open"))
-        if not issues:
-            continue
+        issue = repo.get_issue(issue_number)
 
-        # Upsert on the first issue
-        issue = issues[0]
-        for c in issue.get_comments():
-            if c.user.login == bot_username and c.body.startswith("## Summary"):
-                c.edit(body)
-                print(f"[summarizer] Updated summary on {repo_name}#{issue.number}")
-                break
-        else:
-            issue.create_comment(body)
-            print(f"[summarizer] Posted summary on {repo_name}#{issue.number}")
+        issue.create_comment(body)
+        print(f"[summarizer] Posted summary on {repo_name}#{issue_number}")
