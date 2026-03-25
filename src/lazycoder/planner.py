@@ -33,15 +33,12 @@ Cost estimates per subtask:
   medium ~$0.05  (feature, refactor, few files)
   large  ~$0.10  (complex, many files, unclear scope)
 
-Flag an issue as "stuck" if its status says the same thing for 2+ runs.
-
 Return a JSON array — one entry per issue:
 [
   {
     "issue": 42,
     "repo": "owner/repo",
-    "items": [{"text": "...", "estimate_usd": 0.05, "done": false}, ...],
-    "stuck": false
+    "items": [{"text": "...", "estimate_usd": 0.05, "done": false}, ...]
   }
 ]
 Only include issues that need a plan created or updated. Skip issues that already
@@ -179,10 +176,6 @@ def run_planner(
         else:
             c = issue.create_comment(body)
             plan.comment_id = c.id
-
-        if upd.get("stuck"):
-            issue.add_to_labels("needs-human")
-            print(f"[planner] #{upd['issue']} flagged as stuck → needs-human")
 
         plans.append(plan)
 
