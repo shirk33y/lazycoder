@@ -17,6 +17,7 @@ from pathlib import Path
 from github import Github
 
 import logging
+import time
 
 from .budget import DailyBudget, add_entry, over_hard_limit
 from .config import Config
@@ -250,4 +251,7 @@ def run_all(tasks: list[Task], budget: DailyBudget, cfg: Config) -> list[RunResu
         if not result.success:
             short_err = (result.notes or "unknown error")[:120]
             print(f"        ERROR: {short_err}")
+        if i < len(tasks) and cfg.task_delay_seconds > 0:
+            print(f"        waiting {cfg.task_delay_seconds}s …")
+            time.sleep(cfg.task_delay_seconds)
     return results

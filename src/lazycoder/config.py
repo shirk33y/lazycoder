@@ -23,7 +23,7 @@ class BudgetConfig:
 class ModelsConfig:
     planner: str = "anthropic/claude-sonnet-4-6"
     summarizer: str = "anthropic/claude-haiku-4-5-20251001"
-    executor: str = "anthropic/claude-sonnet-4-6"
+    executor: str = "anthropic/claude-haiku-4-5-20251001"
 
 
 @dataclass
@@ -46,6 +46,7 @@ class Config:
     models: ModelsConfig = field(default_factory=ModelsConfig)
     github: GitHubConfig = field(default_factory=GitHubConfig)
     branch_prefix: str = "bot/run"
+    task_delay_seconds: int = 60  # pause between executor tasks to avoid rate limits
     priority_labels: list[str] = field(
         default_factory=lambda: ["priority/critical", "priority/high", "priority/medium", "priority/low"]
     )
@@ -68,6 +69,7 @@ def load_config(path: str | Path) -> Config:
         models=models,
         github=github,
         branch_prefix=raw.get("branch_prefix", "bot/run"),
+        task_delay_seconds=raw.get("task_delay_seconds", 60),
         priority_labels=raw.get("priority_labels", Config.__dataclass_fields__["priority_labels"].default_factory()),
         blocked_labels=raw.get("blocked_labels", Config.__dataclass_fields__["blocked_labels"].default_factory()),
     )
