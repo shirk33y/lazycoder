@@ -10,6 +10,8 @@ Run cycle:
 from __future__ import annotations
 
 import click
+import litellm
+litellm.num_retries = 0  # never retry — rate limits should halt cleanly
 
 from .budget import load_budget, save_budget
 from .config import load_config
