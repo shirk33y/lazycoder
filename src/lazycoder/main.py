@@ -87,6 +87,9 @@ def run(config_path: str, dry_run: bool) -> None:
         print("\nnothing to schedule — done.")
         return
 
+    if cfg.max_tasks_per_run > 0:
+        tasks = tasks[:cfg.max_tasks_per_run]
+
     print(f"\nscheduled {len(tasks)} task(s):")
     for t in tasks:
         pri = t.priority.value or "—"

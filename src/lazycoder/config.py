@@ -47,6 +47,7 @@ class Config:
     github: GitHubConfig = field(default_factory=GitHubConfig)
     branch_prefix: str = "bot/run"
     task_delay_seconds: int = 60  # pause between executor tasks to avoid rate limits
+    max_tasks_per_run: int = 0  # 0 = unlimited
     priority_labels: list[str] = field(
         default_factory=lambda: ["priority/critical", "priority/high", "priority/medium", "priority/low"]
     )
@@ -70,6 +71,7 @@ def load_config(path: str | Path) -> Config:
         github=github,
         branch_prefix=raw.get("branch_prefix", "bot/run"),
         task_delay_seconds=raw.get("task_delay_seconds", 60),
+        max_tasks_per_run=raw.get("max_tasks_per_run", 0),
         priority_labels=raw.get("priority_labels", Config.__dataclass_fields__["priority_labels"].default_factory()),
         blocked_labels=raw.get("blocked_labels", Config.__dataclass_fields__["blocked_labels"].default_factory()),
     )
