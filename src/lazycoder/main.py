@@ -12,7 +12,6 @@ from __future__ import annotations
 import click
 import litellm
 litellm.num_retries = 0  # never retry — rate limits should halt cleanly
-litellm._turn_on_debug()  # TODO: remove after diagnosing rate limit issue
 
 from .budget import load_budget, save_budget
 from .config import load_config
