@@ -1,0 +1,23 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "lazycoder"
+version = "0.1.0"
+description = "Multi-repo GitHub issue bot: legislative/judicial/executive agents via mini-swe-agent"
+requires-python = ">=3.11"
+dependencies = [
+    "mini-swe-agent",
+    "litellm",
+    "PyGithub",
+    "pyyaml",
+    "click",
+    "python-dotenv",
+]
+
+[project.scripts]
+lazycoder = "lazycoder.main:cli"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/lazycoder"]

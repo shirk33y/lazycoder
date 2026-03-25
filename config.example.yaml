@@ -1,0 +1,28 @@
+repos:
+  - shirk33y/tauron
+
+budget:
+  soft_limit_daily: 0.50
+  hard_limit_daily: 1.00
+  cost_overrun_multiplier: 2.0
+
+models:
+  planner: anthropic/claude-sonnet-4-6
+  summarizer: anthropic/claude-haiku-4-5-20251001
+  executor: anthropic/claude-sonnet-4-6
+
+github:
+  token_env: GITHUB_TOKEN
+  bot_username: lazycoder-bot
+
+branch_prefix: bot/run
+
+priority_labels:
+  - priority/critical
+  - priority/high
+  - priority/medium
+  - priority/low
+
+blocked_labels:
+  - needs-human
+  - wontfix
