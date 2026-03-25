@@ -95,11 +95,17 @@ def _run_agent(prompt: str, repo_dir: Path, model: str) -> tuple[str, float]:
     result = agent.run(prompt)
 
     cost = 0.0
+    tokens_in = 0
+    tokens_out = 0
     try:
         from minisweagent.models import GLOBAL_MODEL_STATS
         cost = float(getattr(GLOBAL_MODEL_STATS, "total_cost", 0.0))
+        tokens_in = int(getattr(GLOBAL_MODEL_STATS, "total_prompt_tokens", 0))
+        tokens_out = int(getattr(GLOBAL_MODEL_STATS, "total_completion_tokens", 0))
     except Exception:
         pass
+    if tokens_in or tokens_out:
+        print(f"        tokens  in={tokens_in}  out={tokens_out}  cost=${cost:.4f}")
 
     summary = result.get("output") or result.get("result") or "(no summary)"
     return str(summary), cost

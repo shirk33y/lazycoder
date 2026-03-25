@@ -130,18 +130,50 @@ def plan(config_path: str, dry_run: bool) -> None:
         print(f"  {p.repo}#{p.issue_number}  {pending} pending tasks  ~${total_est:.2f}")
 
 
+def _fetch_anthropic_cost(admin_key: str) -> str | None:
+    """Fetch today's cost from Anthropic Admin API. Returns formatted string or None."""
+    import urllib.request
+    import urllib.error
+    from datetime import datetime, timezone
+    today = datetime.now(timezone.utc).strftime("%Y-%m-%dT00:00:00Z")
+    tomorrow = datetime.now(timezone.utc).strftime("%Y-%m-%dT23:59:59Z")
+    url = (
+        f"https://api.anthropic.com/v1/organizations/cost_report"
+        f"?starting_at={today}&ending_at={tomorrow}&group_by[]=model"
+    )
+    req = urllib.request.Request(url, headers={
+        "anthropic-version": "2023-06-01",
+        "x-api-key": admin_key,
+    })
+    try:
+        with urllib.request.urlopen(req, timeout=5) as r:
+            import json as _json
+            data = _json.loads(r.read())
+            total_cents = sum(float(e.get("cost", 0)) for e in data.get("data", []))
+            return f"${total_cents/100:.4f} today (Anthropic Admin API)"
+    except Exception as e:
+        return f"unavailable ({e})"
+
+
 @cli.command()
 @click.argument("config_path", default="config.yaml", type=click.Path(exists=True))
 def budget_status(config_path: str) -> None:
     """Show today's budget usage."""
+    import os as _os
     cfg = load_config(config_path)
     budget = load_budget()
-    print(f"Date:        {budget.date}")
-    print(f"Soft limit:  ${cfg.budget.soft_limit_daily:.2f}")
-    print(f"Hard limit:  ${cfg.budget.hard_limit_daily:.2f}")
-    print(f"Spent:       ${budget.total:.3f}")
+    print(f"date         {budget.date}")
+    print(f"soft limit   ${cfg.budget.soft_limit_daily:.2f}")
+    print(f"hard limit   ${cfg.budget.hard_limit_daily:.2f}")
+    print(f"spent today  ${budget.total:.4f}")
     for e in budget.entries:
-        print(f"  {e.repo}#{e.issue}  est=${e.estimated:.3f}  actual=${e.actual:.3f}  '{e.task[:50]}'")
+        mark = "✓" if e.actual > 0 else "—"
+        print(f"  {mark} {e.repo}#{e.issue}  est=${e.estimated:.3f}  actual=${e.actual:.4f}  '{e.task[:50]}'")
+    admin_key = _os.getenv("ANTHROPIC_ADMIN_KEY")
+    if admin_key:
+        print(f"\nanthropix    {_fetch_anthropic_cost(admin_key)}")
+    else:
+        print("\nanthropix    set ANTHROPIC_ADMIN_KEY in ~/.env for live balance")
 
 
 if __name__ == "__main__":

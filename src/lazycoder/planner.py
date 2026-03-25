@@ -55,6 +55,10 @@ def _llm(model: str, prompt: str) -> str:
         ],
         max_tokens=4096,
     )
+    u = getattr(resp, "usage", None)
+    if u:
+        cost = litellm.completion_cost(completion_response=resp)
+        print(f"  tokens  in={u.prompt_tokens}  out={u.completion_tokens}  cost=${cost:.4f}")
     return resp.choices[0].message.content.strip()
 
 
