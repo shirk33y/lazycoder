@@ -44,7 +44,7 @@ def record_result(repo: str, issue: int, success: bool, transient: bool = False,
     elif not transient:
         counts[k] = counts.get(k, 0) + 1
     save_counts(counts, path)
-    return counts[k]
+    return counts.get(k, 0)
 
 
 def is_stuck(repo: str, issue: int, path: Path = RUN_COUNTS_FILE) -> bool:

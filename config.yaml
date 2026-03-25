@@ -1,5 +1,5 @@
 repos:
-  - shirk33y/tauron
+  - shirk33y/lazycoder
 
 budget:
   soft_limit_daily: 0.50
@@ -9,13 +9,14 @@ budget:
 models:
   planner: anthropic/claude-sonnet-4-6
   summarizer: anthropic/claude-haiku-4-5-20251001
-  executor: anthropic/claude-sonnet-4-6
+  executor: anthropic/claude-haiku-4-5-20251001
 
 github:
   token_env: GITHUB_TOKEN
   bot_username: lazycoder-bot
 
 branch_prefix: bot/run
+task_delay_seconds: 60
 
 priority_labels:
   - priority/critical
@@ -26,3 +27,4 @@ priority_labels:
 blocked_labels:
   - needs-human
   - wontfix
+  - bot-meta
