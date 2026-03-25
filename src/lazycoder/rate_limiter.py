@@ -75,12 +75,12 @@ class TokenRateLimiter:
         self._reserved = max(0, self._reserved - actual_tokens)
         self._log.append(_Entry(timestamp=time.monotonic(), tokens=actual_tokens))
 
-    def sync_from_headers(self, headers: dict) -> None:
-        """Sync remaining capacity from API response headers.
+    def sync_from_headers(self, headers: dict, low_water_pct: float = 0.6) -> None:
+        """Sync from Anthropic response headers and sleep until reset if running low.
 
-        Reads anthropic-ratelimit-input-tokens-remaining and -reset to anchor
-        our local state to the server's truth (handles tokens from previous
-        processes/runs that we don't know about locally).
+        If remaining input tokens < low_water_pct * limit, sleeps until the
+        server's reset timestamp (when all tokens in the current window expire).
+        This handles tokens from previous processes we don't know about locally.
         """
         import datetime
 
@@ -89,35 +89,24 @@ class TokenRateLimiter:
 
         remaining_str = headers.get(remaining_key)
         reset_str = headers.get(reset_key)
-        if remaining_str is None:
+        if not remaining_str or not reset_str:
             return
 
         try:
             remaining = int(remaining_str)
-            server_used = self.limit - remaining
-            if server_used <= 0:
-                # Server shows full capacity — clear our local log
-                self._log.clear()
-                self._reserved = 0
-                return
+            threshold = self.limit * low_water_pct
 
-            # Derive when the oldest token in server's window was sent:
-            # reset_time is when ALL tokens expire → oldest token = reset_time - 60s
-            if reset_str:
+            if remaining < threshold:
                 reset_dt = datetime.datetime.fromisoformat(reset_str.replace("Z", "+00:00"))
-                reset_ts = reset_dt.timestamp()
-                # Convert to monotonic equivalent
                 wall_now = datetime.datetime.now(datetime.timezone.utc).timestamp()
-                mono_now = time.monotonic()
-                reset_mono = mono_now + (reset_ts - wall_now)
-                oldest_mono = reset_mono - self.window
-
-                # Replace our log with a synthetic entry representing server-known usage
-                # anchored at the oldest possible time in the window
+                wait = reset_dt.timestamp() - wall_now + 1.0  # +1s buffer
+                if wait > 0:
+                    print(f"  rate limit: {remaining}/{self.limit} input tokens remaining"
+                          f" — sleeping {wait:.0f}s until reset …")
+                    time.sleep(wait)
+                # After reset all tokens expire — clear local state
                 self._log.clear()
                 self._reserved = 0
-                if server_used > 0:
-                    self._log.append(_Entry(timestamp=oldest_mono, tokens=server_used))
         except Exception:
             pass
 
