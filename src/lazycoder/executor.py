@@ -8,6 +8,7 @@ Hard budget gate checked before each agent invocation.
 
 from __future__ import annotations
 
+import os
 import shutil
 import subprocess
 import tempfile
@@ -86,6 +87,7 @@ def _run_agent(prompt: str, repo_dir: Path, model: str) -> tuple[str, float]:
 
     logging.getLogger("LiteLLM").setLevel(logging.ERROR)
     logging.getLogger("litellm").setLevel(logging.ERROR)
+    os.environ["MSWEA_MODEL_RETRY_STOP_AFTER_ATTEMPT"] = "1"  # no retries — halt on rate limit
 
     env = LocalEnvironment(cwd=str(repo_dir))
     mdl = LitellmModel(model_name=model, cost_tracking="ignore_errors")
