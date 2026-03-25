@@ -38,6 +38,23 @@ def _priority_enum(label_names: set[str]) -> Priority:
     return Priority.NONE
 
 
+def select_within_budget(
+    candidates: list[tuple[int, float, Task]],
+    remaining: float,
+) -> list[Task]:
+    """Pure selection logic: sort candidates, pick tasks that fit in remaining budget."""
+    candidates.sort(key=lambda x: (x[0], x[1]))
+    selected: list[Task] = []
+    accumulated = 0.0
+    for _, est, task in candidates:
+        if accumulated + est > remaining:
+            print(f"[scheduler] Budget cap reached at ${accumulated:.3f} — stopping selection")
+            break
+        selected.append(task)
+        accumulated += est
+    return selected
+
+
 def schedule(
     plans: list[Plan],
     budget: DailyBudget,
@@ -52,9 +69,7 @@ def schedule(
         return []
 
     gh = Github(token)
-
-    # Collect candidates with their priority
-    candidates: list[tuple[int, float, Task]] = []  # (sort_key, est, task)
+    candidates: list[tuple[int, float, Task]] = []
 
     for plan in plans:
         try:
@@ -87,18 +102,7 @@ def schedule(
             )
             candidates.append((sort_key, est, task))
 
-    # Sort by priority, then by estimate ascending (cheap first within same priority)
-    candidates.sort(key=lambda x: (x[0], x[1]))
-
-    selected: list[Task] = []
-    accumulated = 0.0
-
-    for _, est, task in candidates:
-        if accumulated + est > remaining:
-            print(f"[scheduler] Budget cap reached at ${accumulated:.3f} — stopping selection")
-            break
-        selected.append(task)
-        accumulated += est
-
-    print(f"[scheduler] {len(selected)} tasks selected, estimated ${accumulated:.3f} / ${remaining:.3f} remaining")
+    selected = select_within_budget(candidates, remaining)
+    total = sum(t.estimate_usd for t in selected)
+    print(f"[scheduler] {len(selected)} tasks selected, estimated ${total:.3f} / ${remaining:.3f} remaining")
     return selected
