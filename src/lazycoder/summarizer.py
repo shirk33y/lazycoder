@@ -29,15 +29,13 @@ def _llm(model: str, user: str, *, repo: str, issue: int) -> str:
         {"role": "system", "content": _SUMMARY_SYSTEM},
         {"role": "user", "content": user},
     ]
-    resp = litellm.completion(
-        model=model,
-        messages=messages,
-        max_tokens=512,
-    )
+    est_in = litellm.token_counter(model=model, messages=messages)
+    print(f"  sending  in~{est_in} tokens …")
+    resp = litellm.completion(model=model, messages=messages, max_tokens=512)
     u = getattr(resp, "usage", None)
     if u:
         cost = litellm.completion_cost(completion_response=resp)
-        print(f"  tokens  in={u.prompt_tokens}  out={u.completion_tokens}  cost=${cost:.4f}")
+        print(f"  done     in={u.prompt_tokens}  out={u.completion_tokens}  cost=${cost:.4f}")
     # Persist conversation (best-effort — never crash the main flow)
     try:
         path = _store.save_conversation(

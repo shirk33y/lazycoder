@@ -89,6 +89,14 @@ def _run_agent(prompt: str, repo_dir: Path, model: str) -> tuple[str, float]:
     logging.getLogger("litellm").setLevel(logging.ERROR)
     os.environ["MSWEA_MODEL_RETRY_STOP_AFTER_ATTEMPT"] = "1"  # no retries — halt on rate limit
 
+    import litellm as _litellm
+    first_messages = [
+        {"role": "system", "content": _DEFAULT_SYSTEM},
+        {"role": "user", "content": _DEFAULT_INSTANCE.replace("{{task}}", prompt)},
+    ]
+    est_in = _litellm.token_counter(model=model, messages=first_messages)
+    print(f"        sending  in~{est_in} tokens …")
+
     env = LocalEnvironment(cwd=str(repo_dir))
     mdl = LitellmModel(model_name=model, cost_tracking="ignore_errors")
     agent = DefaultAgent(mdl, env, system_template=_DEFAULT_SYSTEM, instance_template=_DEFAULT_INSTANCE)

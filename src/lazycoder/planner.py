@@ -47,18 +47,17 @@ have a complete, up-to-date plan with no new status info.
 
 
 def _llm(model: str, prompt: str) -> str:
-    resp = litellm.completion(
-        model=model,
-        messages=[
-            {"role": "system", "content": _PLAN_SYSTEM},
-            {"role": "user", "content": prompt},
-        ],
-        max_tokens=4096,
-    )
+    messages = [
+        {"role": "system", "content": _PLAN_SYSTEM},
+        {"role": "user", "content": prompt},
+    ]
+    est_in = litellm.token_counter(model=model, messages=messages)
+    print(f"  sending  in~{est_in} tokens …")
+    resp = litellm.completion(model=model, messages=messages, max_tokens=4096)
     u = getattr(resp, "usage", None)
     if u:
         cost = litellm.completion_cost(completion_response=resp)
-        print(f"  tokens  in={u.prompt_tokens}  out={u.completion_tokens}  cost=${cost:.4f}")
+        print(f"  done     in={u.prompt_tokens}  out={u.completion_tokens}  cost=${cost:.4f}")
     return resp.choices[0].message.content.strip()
 
 
