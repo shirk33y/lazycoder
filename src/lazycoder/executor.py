@@ -19,6 +19,7 @@ from github import Github
 from .budget import DailyBudget, add_entry, over_hard_limit
 from .config import Config
 from .models import RunResult, Task
+from .run_tracker import record_result
 
 
 def _build_prompt(issue_title: str, issue_body: str, task_text: str, prior_status: str | None) -> str:
@@ -165,6 +166,7 @@ def run_task(task: Task, budget: DailyBudget, cfg: Config) -> RunResult:
             comment_id = nc.id
 
         add_entry(budget, task.repo, task.issue_number, task.task_text, task.estimate_usd, actual_cost)
+        record_result(task.repo, task.issue_number, success=changed)
         return RunResult(task=task, success=changed, actual_cost=actual_cost,
                          branch=branch, notes=summary, status_comment_id=comment_id)
 
@@ -176,6 +178,7 @@ def run_task(task: Task, budget: DailyBudget, cfg: Config) -> RunResult:
             )
         except Exception:
             pass
+        record_result(task.repo, task.issue_number, success=False)
         return RunResult(task=task, success=False, actual_cost=0.0, branch=branch, notes=str(exc))
     finally:
         if repo_dir and repo_dir.exists():

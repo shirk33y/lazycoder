@@ -13,6 +13,7 @@ from github import Github
 
 from .budget import DailyBudget, remaining_soft
 from .models import Plan, Priority, Task
+from .run_tracker import is_stuck
 
 
 # Priority label → sort key (lower = higher priority)
@@ -68,6 +69,15 @@ def schedule(
 
         if label_names & set(blocked_labels):
             print(f"[scheduler] #{plan.issue_number} skipped (blocked label)")
+            continue
+
+        # Data-based stuck detection — no LLM needed
+        if is_stuck(plan.repo, plan.issue_number):
+            print(f"[scheduler] #{plan.issue_number} stuck ({3}+ failed runs) → adding needs-human")
+            try:
+                issue.add_to_labels("needs-human")
+            except Exception:
+                pass
             continue
 
         sort_key = _priority_of(label_names)
