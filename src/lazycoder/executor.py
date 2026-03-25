@@ -20,9 +20,12 @@ from github import Github
 import logging
 import time
 
+import litellm
+
 from .budget import DailyBudget, add_entry, over_hard_limit
 from .config import Config
 from .models import RunResult, Task
+from .rate_limiter import get_limiter
 from .run_tracker import record_result
 
 
@@ -89,12 +92,12 @@ def _run_agent(prompt: str, repo_dir: Path, model: str) -> tuple[str, float]:
     logging.getLogger("litellm").setLevel(logging.ERROR)
     os.environ["MSWEA_MODEL_RETRY_STOP_AFTER_ATTEMPT"] = "1"  # no retries — halt on rate limit
 
-    import litellm as _litellm
     first_messages = [
         {"role": "system", "content": _DEFAULT_SYSTEM},
         {"role": "user", "content": _DEFAULT_INSTANCE.replace("{{task}}", prompt)},
     ]
-    est_in = _litellm.token_counter(model=model, messages=first_messages)
+    est_in = litellm.token_counter(model=model, messages=first_messages)
+    get_limiter(model).acquire(est_in, label="executor")
     print(f"        sending  in~{est_in} tokens …")
 
     env = LocalEnvironment(cwd=str(repo_dir))
@@ -114,6 +117,7 @@ def _run_agent(prompt: str, repo_dir: Path, model: str) -> tuple[str, float]:
         pass
     if tokens_in or tokens_out:
         print(f"        tokens  in={tokens_in}  out={tokens_out}  cost=${cost:.4f}")
+    get_limiter(model).record(tokens_in + tokens_out or est_in)
 
     summary = result.get("output") or result.get("result") or "(no summary)"
     return str(summary), cost
@@ -254,20 +258,11 @@ def run_all(tasks: list[Task], budget: DailyBudget, cfg: Config) -> list[RunResu
             print(f"  ⚠ hard limit ${cfg.budget.hard_limit_daily} reached — stopping")
             break
         print(f"  [{i}/{len(tasks)}] #{task.issue_number}  {task.task_text[:70]}")
-        retry_delays = [60, 120, 240]
-        for attempt, delay in enumerate(retry_delays + [None], 1):
-            try:
-                result = run_task(task, budget, cfg)
-                break
-            except _RateLimitHalt as e:
-                if delay is None:
-                    print(f"  ⚠ rate limit — giving up after {len(retry_delays)+1} attempts")
-                    results  # return what we have
-                    return results
-                print(f"  ⚠ rate limit — waiting {delay}s then retrying (attempt {attempt}/{len(retry_delays)+1})")
-                time.sleep(delay)
-        else:
-            break
+        try:
+            result = run_task(task, budget, cfg)
+        except _RateLimitHalt:
+            print(f"  ⚠ rate limit — halting run")
+            return results
         results.append(result)
         mark = "✓" if result.success else "✗"
         cost_str = f"${result.actual_cost:.3f}"
