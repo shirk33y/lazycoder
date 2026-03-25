@@ -1,0 +1,11 @@
+config.yaml
+spent_today.json
+run_log.json
+*.json
+__pycache__/
+*.egg-info/
+*.egg-link
+.venv/
+dist/
+build/
+.env
