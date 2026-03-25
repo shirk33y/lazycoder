@@ -41,6 +41,37 @@ def _build_prompt(issue_title: str, issue_body: str, task_text: str, prior_statu
     return "\n".join(parts)
 
 
+_DEFAULT_SYSTEM = """\
+You are a helpful assistant that can interact with a computer.
+
+Your response must contain exactly ONE bash code block with ONE command (or commands connected with && or ||).
+Include a THOUGHT section before your command where you explain your reasoning process.
+Format your response as shown in <format_example>.
+
+<format_example>
+Your reasoning and analysis here. Explain why you want to perform the action.
+
+```mswea_bash_command
+your_command_here
+```
+</format_example>
+
+Failure to follow these rules will cause your response to be rejected.
+"""
+
+_DEFAULT_INSTANCE = """\
+Please solve this task: {{task}}
+
+You can execute bash commands and edit files to implement the necessary changes.
+
+## Recommended Workflow
+1. Analyze the codebase by finding and reading relevant files
+2. Make the changes needed for this task
+3. Run existing tests if present — do not break passing tests
+4. Output a one-paragraph summary of what you changed (do NOT commit)
+"""
+
+
 def _run_agent(prompt: str, repo_dir: Path, model: str) -> tuple[str, float]:
     from minisweagent.agents.default import DefaultAgent
     from minisweagent.environments.local import LocalEnvironment
@@ -48,7 +79,7 @@ def _run_agent(prompt: str, repo_dir: Path, model: str) -> tuple[str, float]:
 
     env = LocalEnvironment(cwd=str(repo_dir))
     mdl = LitellmModel(model_name=model, cost_tracking="ignore_errors")
-    agent = DefaultAgent(mdl, env)
+    agent = DefaultAgent(mdl, env, system_template=_DEFAULT_SYSTEM, instance_template=_DEFAULT_INSTANCE)
     result = agent.run(prompt)
 
     cost = 0.0
