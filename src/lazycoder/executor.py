@@ -233,15 +233,20 @@ def run_task(task: Task, budget: DailyBudget, cfg: Config) -> RunResult:
 
     except Exception as exc:
         err = str(exc)
-        is_rate_limit = "rate_limit" in err.lower() or "RateLimitError" in type(exc).__name__
-        try:
-            issue.create_comment(
-                f"## Status\nTask: `{task.task_text}`\nBranch: `{branch}`\n\n"
-                f"```\nERROR: {err[:400]}\n```\n\nCost: $0.000"
-            )
-        except Exception:
-            pass
-        record_result(task.repo, task.issue_number, success=False)
+        err_type = type(exc).__name__
+        is_rate_limit = "rate_limit" in err.lower() or "RateLimitError" in err_type
+        is_transient = is_rate_limit or "timeout" in err.lower() or (
+            any(code in err for code in ("500", "502", "503", "504"))
+        )
+        if not is_transient:
+            try:
+                issue.create_comment(
+                    f"## Status\nTask: `{task.task_text}`\nBranch: `{branch}`\n\n"
+                    f"```\nERROR: {err[:400]}\n```\n\nCost: $0.000"
+                )
+            except Exception:
+                pass
+        record_result(task.repo, task.issue_number, success=False, transient=is_transient)
         result = RunResult(task=task, success=False, actual_cost=0.0, branch=branch, notes=err)
         if is_rate_limit:
             raise _RateLimitHalt(err) from exc

@@ -31,13 +31,17 @@ def save_counts(counts: dict[str, int], path: Path = RUN_COUNTS_FILE) -> None:
     path.write_text(json.dumps(counts, indent=2))
 
 
-def record_result(repo: str, issue: int, success: bool, path: Path = RUN_COUNTS_FILE) -> int:
-    """Increment or reset the failure counter. Returns the new count."""
+def record_result(repo: str, issue: int, success: bool, transient: bool = False,
+                  path: Path = RUN_COUNTS_FILE) -> int:
+    """Increment or reset the failure counter. Returns the new count.
+
+    transient=True: rate limit, timeout, 5xx — don't count against the issue.
+    """
     counts = load_counts(path)
     k = _key(repo, issue)
     if success:
         counts[k] = 0
-    else:
+    elif not transient:
         counts[k] = counts.get(k, 0) + 1
     save_counts(counts, path)
     return counts[k]
