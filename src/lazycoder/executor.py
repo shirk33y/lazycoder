@@ -254,11 +254,19 @@ def run_all(tasks: list[Task], budget: DailyBudget, cfg: Config) -> list[RunResu
             print(f"  ⚠ hard limit ${cfg.budget.hard_limit_daily} reached — stopping")
             break
         print(f"  [{i}/{len(tasks)}] #{task.issue_number}  {task.task_text[:70]}")
-        try:
-            result = run_task(task, budget, cfg)
-        except _RateLimitHalt as e:
-            print(f"  ⚠ rate limit hit — halting run")
-            print(f"    {str(e)[:200]}")
+        retry_delays = [60, 120, 240]
+        for attempt, delay in enumerate(retry_delays + [None], 1):
+            try:
+                result = run_task(task, budget, cfg)
+                break
+            except _RateLimitHalt as e:
+                if delay is None:
+                    print(f"  ⚠ rate limit — giving up after {len(retry_delays)+1} attempts")
+                    results  # return what we have
+                    return results
+                print(f"  ⚠ rate limit — waiting {delay}s then retrying (attempt {attempt}/{len(retry_delays)+1})")
+                time.sleep(delay)
+        else:
             break
         results.append(result)
         mark = "✓" if result.success else "✗"
