@@ -41,7 +41,7 @@ def _build_prompt(issue_title: str, issue_body: str, task_text: str, prior_statu
         issue_body or "(no body)",
     ]
     if prior_status:
-        parts += ["", "Prior run status:", prior_status]
+        parts += ["", "Prior bot comments (conversation history):", prior_status]
     parts += [
         "",
         "Instructions:",
@@ -151,12 +151,13 @@ def run_task(task: Task, budget: DailyBudget, cfg: Config) -> RunResult:
     base_branch = repo_obj.default_branch
     branch = f"{cfg.branch_prefix}-{date.today().isoformat()}"
 
-    # Prior status for context
-    prior_status = None
+    # Collect prior comments as conversation history (bot comments only, last 5)
+    prior_comments: list[str] = []
     for c in issue.get_comments():
-        if c.user.login == cfg.github.bot_username and c.body.startswith("## Status"):
-            prior_status = c.body
-            break
+        if c.user.login == cfg.github.bot_username:
+            prior_comments.append(c.body)
+    prior_comments = prior_comments[-5:]  # keep last 5 to limit context size
+    prior_status = "\n\n---\n\n".join(prior_comments) if prior_comments else None
 
     repo_dir: Path | None = None
     try:
