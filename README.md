@@ -1,3 +1,5 @@
+<!-- project-index-summary: Autonomous GitHub issue bot: planner → scheduler → executor → summarizer -->
+
 # lazycoder
 
 Autonomous GitHub issue bot. Reads open issues, plans work, writes code, opens PRs.
